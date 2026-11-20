@@ -127,12 +127,92 @@
 
 ---
 
+## Step 2 — Genetic Algorithm Core
+**Date:** 2026-11-20  
+**Commit:** `6f05f9c` — *"Member 3: genetic algorithm for CLAHE parameter optimisation"*
+
+### What was done
+Fully implemented `optimization/genetic_algorithm.py` replacing the Step 1 skeleton.
+
+### Design Decisions
+
+**Chromosome encoding:**
+- Index 0 → `clip_limit` (float ∈ [1.0, 8.0])
+- Index 1 → `tile_grid_size` (stored as float, cast to int on decode, ∈ [4, 16])
+- Using float64 array for uniform dtype — grid size is rounded on `_decode()`
+
+**Speed strategy (downscaling):**
+- GA evaluations run on a downscaled copy (`work_size=256` longest side) — fast!
+- Best parameters are applied to the **full-resolution** image at the end only once.
+- `_downscale()` skips scaling if the image is already small enough.
+
+**Fitness cache:**
+- `dict[tuple, float]` keyed on `(round(clip, 2), int(grid))`.
+- Avoids re-evaluating chromosomes that round to the same params across generations.
+
+**GA operators:**
+| Operator | Clip limit | Tile grid size |
+|----------|-----------|----------------|
+| Crossover | BLX-α (blend, α=0.5) — allows slight exploration beyond parent range | Uniform crossover — randomly picks either parent's value |
+| Mutation | Gaussian N(0, range/6) + clip | ±1 step + clip |
+| Selection | Tournament (k=3 by default) — simple, controllable selection pressure |
+| Elitism | Top-k copied unchanged — guarantees non-decreasing best fitness |
+
+**Fitness function (module-level weight constants for easy tuning):**
+```python
+# Reference-based (ground truth available):
+fitness = 0.50*SSIM + 0.40*clip(PSNR/40, 0,1) + 0.10*edge_pres - 0.20*noise_pen
+
+# No-reference (no ground truth):
+fitness = 0.35*(entropy/8) + 0.35*edge_pres + 0.30*brightness_score - 0.20*noise_pen
+
+# noise_penalty = clip(max(0, σ(enhanced) - σ(input)) / 10, 0, 1)
+# brightness_score = clip(1 - |mean/255 - 0.5|*2, 0, 1)
+```
+
+**Early stopping:** `patience=10` — stops if no improvement > 1e-6 for 10 consecutive generations.
+
+### Demo Output
+```
+=================================================================
+  optimization/genetic_algorithm.py  —  DEMO
+=================================================================
+[IMAGE] Using synthetic dark image  shape=(128, 128, 3)  mean=37.5
+
+[GA RUN 1] Running with seed=42 …
+  Best clip_limit    : 7.9987
+  Best tile_grid_size: 4
+  Best fitness       : 0.752260
+  Generations run    : 15        ← stopped early (patience=10)
+  Time               : 0.41s
+
+[GA RUN 2] Same seed=42, verifying reproducibility …
+  ✓ PASS  Results are IDENTICAL for the same seed.
+  ✓ PASS  Best-fitness history is non-decreasing across 16 generations.
+  ✓ PASS  clip_limit=7.9987 ∈ [1.0, 8.0]  |  tile_grid_size=4 ∈ [4, 16]
+
+[ALL CHECKS PASSED]
+```
+
+### Output files (not committed — generated artifacts)
+- `results/figures/ga_demo_before_after.png`
+- `results/figures/ga_demo_fitness_history.png`
+
+### Git Log
+```
+6f05f9c  Member 3: genetic algorithm for CLAHE parameter optimisation
+93393fd  Add paired low-light image datasets   ← teammate's commit on main
+64bf0f3  Member 3: project skeleton and compat layer
+```
+
+---
+
 ## Upcoming Steps
 
 | Step | Topic | Status |
 |------|-------|--------|
 | Step 1 | Setup + compat layer | ✅ Done |
-| Step 2 | GA core (`genetic_algorithm.py`) | ⏳ Pending |
-| Step 3 | Hybrid pipeline (`hybrid.py`) | ⏳ Pending |
+| Step 2 | GA core (`genetic_algorithm.py`) | ✅ Done |
+| Step 3 | Hybrid pipeline (`hybrid.py`) | ✅ Done |
 | Step 4 | Streamlit app (`app.py`) | ⏳ Pending |
 | Step 5 | Experiments + comparison | ⏳ Pending |
