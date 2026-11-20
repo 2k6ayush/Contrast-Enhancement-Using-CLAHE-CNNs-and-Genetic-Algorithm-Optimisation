@@ -280,7 +280,7 @@ Fully implemented `optimization/hybrid.py` and updated `optimization/__init__.py
 
 ## Step 4A — Experiments Runner (Infrastructure + Experiments 1–3)
 **Date:** 2026-11-20  
-**Commit:** Pending — *"Member 3: experiments runner (infrastructure + experiments 1-3)"*
+**Commit:** `074a3a2` — *"Member 3: experiments runner (infrastructure + experiments 1-3)"*
 
 ### What was done
 Implemented `evaluation/experiments.py` with shared evaluation infrastructure and experiments 1, 2, and 3.
