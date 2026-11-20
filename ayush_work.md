@@ -207,6 +207,77 @@ fitness = 0.35*(entropy/8) + 0.35*edge_pres + 0.30*brightness_score - 0.20*noise
 
 ---
 
+## Step 3 — Hybrid Pipeline
+**Date:** 2026-11-20  
+**Commit:** `35723f9` — *"Member 3: hybrid enhancement pipeline"*
+
+### What was done
+Fully implemented `optimization/hybrid.py` and updated `optimization/__init__.py`.
+
+### Public API (3 functions)
+
+| Function | Returns | Purpose |
+|----------|---------|---------|
+| `enhance_hybrid(image, model, ground_truth, **ga_kwargs)` | `dict` | Full pipeline — rich dict with intermediates, timing, params |
+| `enhance_hybrid_image(image, model, **ga_kwargs)` | `np.ndarray` | Thin wrapper for teammates — agreed interface (array only) |
+| `enhance_ga_clahe(image, ground_truth, **ga_kwargs)` | `np.ndarray` | Stage 1 only (no CNN) — for ablation config C and app |
+
+### Design Decisions
+
+**Two-stage pipeline:**
+1. `optimize_clahe()` → returns `result["enhanced"]` (full-res GA-CLAHE output)
+2. `enhance_with_cnn(clahe_output, model)` → CNN refinement
+
+**model=None graceful degradation:**
+- Issues `[HYBRID]` warning and returns GA-CLAHE output as-is.
+- Pipeline is 100% functional before Member 2's CNN is merged.
+
+**Output dtype guarantee:**
+- After CNN stage: if output is float (some models return float), it is clamped to [0,255] and cast to uint8.
+
+**Input validation (`_validate_image`):**
+- TypeError if not `np.ndarray`
+- ValueError if `ndim ≠ 3`, channels `≠ 3`, or `dtype ≠ uint8`
+- Clear, actionable error messages.
+
+### Demo Output
+```
+[IMAGE] Synthetic dark image  shape=(128, 128, 3)  mean=31.6
+
+[STAGE 1] Running GA-CLAHE only (enhance_ga_clahe) …
+  Output  shape=(128, 128, 3)  dtype=uint8  mean=119.1
+
+[STAGE 1+2] Running full hybrid pipeline (model=None) …
+  [WARNING] [HYBRID] model=None detected. Skipping CNN refinement stage.
+  clip_limit     : 7.9987
+  tile_grid_size : 4
+  time_ms        : 263.8 ms
+
+[CHECKS]
+  ✓ output dtype=uint8 and shape matches input
+  ✓ output value range [0, 254] ⊂ [0, 255]
+  ✓ enhance_hybrid_image() returns uint8 ndarray (thin wrapper works)
+  ✓ enhance_ga_clahe() output matches hybrid['clahe_output'] (same seed)
+  ✓ ga_history has 16 generation entries
+
+[VALIDATION] Testing bad-input error handling …
+  ✓ float dtype caught: 'image' must have dtype uint8, got float32.
+  ✓ 2D shape caught: 'image' must be 3-dimensional (H×W×C), got ndim=2.
+  ✓ non-array type caught: 'image' must be a numpy.ndarray, got list.
+
+[ALL CHECKS PASSED]
+```
+
+### Git Log
+```
+35723f9  Member 3: hybrid enhancement pipeline
+6f05f9c  Member 3: genetic algorithm for CLAHE parameter optimisation
+93393fd  Add paired low-light image datasets
+64bf0f3  Member 3: project skeleton and compat layer
+```
+
+---
+
 ## Upcoming Steps
 
 | Step | Topic | Status |
