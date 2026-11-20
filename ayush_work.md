@@ -278,6 +278,58 @@ Fully implemented `optimization/hybrid.py` and updated `optimization/__init__.py
 
 ---
 
+## Step 4A — Experiments Runner (Infrastructure + Experiments 1–3)
+**Date:** 2026-11-20  
+**Commit:** Pending — *"Member 3: experiments runner (infrastructure + experiments 1-3)"*
+
+### What was done
+Implemented `evaluation/experiments.py` with shared evaluation infrastructure and experiments 1, 2, and 3.
+
+### Key Infrastructure & Features
+1. **Dataset Loading (`load_paired_split`, `_list_images`):**
+   - Loads paired images (`low/` and `high/`) matching by file stem.
+   - Filters out non-image files and hidden dot files (`.DS_Store`, `._*`).
+   - Strict validation: fails with clear error if folders are missing or empty; never falls back to synthetic data.
+   - Configurable via `--data-root` CLI argument (default: `"dataset"`).
+2. **Fixed Validation Split (`make_val_split`):**
+   - Carves a reproducible 15% validation split from `our485` using a fixed seed (`seed=42`).
+   - Keeps `eval15` exclusively as the unseen test set (never used for tuning).
+3. **Metric Evaluation (`evaluate_method`, `_evaluate_paired`):**
+   - Evaluates: PSNR, SSIM, Entropy, NIQE (graceful NaN handling if stub), Contrast Improvement Index ($std_{enh} / std_{orig}$), Edge Preservation Index (EPI via Sobel gradients), and wall-clock time in ms.
+   - Progress bar via `tqdm` with fallback if unavailable.
+4. **Safe Re-run CSV Persistence (`upsert_results`):**
+   - Writes results to `results/metrics.csv`.
+   - Idempotent: replaces existing rows matching `(experiment, method)` without duplication.
+5. **CLI Options:**
+   - `--exp {1, 2, 3, all}`
+   - `--max-images N` / `-n N`
+   - `--split {val, test}` (default `test`)
+   - `--model-path` (for CNN weights)
+   - `--data-root`
+   - `--seed`
+
+### Experiments Implemented
+- **Exp 1 (Traditional):** Histogram Equalization and default CLAHE (clip=2.0, grid=8).
+- **Exp 2 (CNN-only):** Real CNN loaded via `build_model()` + weights from `--model-path`. Skips with clear warning if CNN is a stub or weights are missing (stub CNN is never recorded as real results).
+- **Exp 3 (Hybrid GA-CLAHE + CNN):** Evaluates `enhance_hybrid` with two modes:
+  - `hybrid_ref`: Reference-based GA fitness (uses ground truth).
+  - `hybrid_noref`: No-reference GA fitness (no ground truth used in GA).
+  - Measures total per-image execution time including the GA search.
+
+### Verification Run
+Command:
+```bash
+python evaluation/experiments.py --exp 1 --max-images 3
+```
+Output:
+- Processed 3 images on `test` split (`eval15`).
+- Results upserted to `results/metrics.csv`.
+- `results/metrics.csv` head confirmed:
+  - Columns: `experiment,method,image,psnr,ssim,entropy,niqe,contrast_improvement_index,edge_preservation,time_ms`
+  - All values present and formatted properly; NIQE is `nan` as expected under the stub.
+
+---
+
 ## Upcoming Steps
 
 | Step | Topic | Status |
@@ -285,5 +337,7 @@ Fully implemented `optimization/hybrid.py` and updated `optimization/__init__.py
 | Step 1 | Setup + compat layer | ✅ Done |
 | Step 2 | GA core (`genetic_algorithm.py`) | ✅ Done |
 | Step 3 | Hybrid pipeline (`hybrid.py`) | ✅ Done |
-| Step 4 | Streamlit app (`app.py`) | ⏳ Pending |
-| Step 5 | Experiments + comparison | ⏳ Pending |
+| Step 4A | Experiments runner (`experiments.py`) | ✅ Done |
+| Step 4B | Streamlit app (`app.py`) | ⏳ Pending |
+| Step 5 | Experiments completion & comparison (`comparison.py`) | ⏳ Pending |
+
