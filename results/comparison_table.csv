@@ -1,0 +1,4 @@
+approach,method,psnr_mean,psnr_std,ssim_mean,ssim_std,entropy_mean,entropy_std,niqe_mean,niqe_std,cii_mean,cii_std,epi_mean,epi_std,time_ms_mean,time_ms_std,model_size_mb,n_images
+Traditional,Histogram EQ,14.2356,3.0314,0.4252,0.0983,4.7419,0.3956,nan,nan,7.6483,2.5526,0.755,0.086,1.9987,5.4035,,15
+Traditional,Default CLAHE,9.1323,2.8587,0.3565,0.1097,5.5542,0.5098,nan,nan,1.6201,0.1784,0.8288,0.0729,7.0127,21.3056,,15
+Proposed,GA-CLAHE + CNN (Proposed),12.5316,3.2379,0.4861,0.0704,6.7259,0.557,nan,nan,3.5722,0.8286,0.7776,0.0843,453.258,65.5616,,15

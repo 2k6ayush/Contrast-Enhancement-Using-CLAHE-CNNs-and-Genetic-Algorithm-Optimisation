@@ -1,0 +1,7 @@
+experiment,method,image,psnr,ssim,entropy,niqe,contrast_improvement_index,edge_preservation,time_ms
+exp1_test,histogram_eq,1.png,17.4227,0.6007,5.4267,nan,2.8195,0.7879,1.16
+exp1_test,histogram_eq,111.png,15.8495,0.4667,5.0367,nan,6.6581,0.8126,0.86
+exp1_test,histogram_eq,146.png,15.4896,0.4349,5.0159,nan,5.8598,0.6974,0.82
+exp1_test,clahe_default,1.png,8.7109,0.4328,6.3352,nan,1.289,0.9079,136.03
+exp1_test,clahe_default,111.png,6.7435,0.3362,6.0084,nan,1.6675,0.8341,2.23
+exp1_test,clahe_default,146.png,8.0507,0.4339,5.9675,nan,1.5363,0.8833,1.89
