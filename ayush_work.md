@@ -361,6 +361,17 @@ Extended `evaluation/experiments.py` with Experiments 4, 5, and 6, and added cus
   - Fixed CLAHE sweep (24 configs × 3 images): ~8 seconds total.
   - GA sweep (2 configs × 3 seeds × 3 images = 18 GA runs): ~9.8 seconds total (~0.54s per GA run).
 
+### Full Experiment 4 Results (Validation Split: 72 images)
+Ran complete hyperparameter tuning sweep on 72 validation images:
+- **Fixed CLAHE Sweep (24 configs × 72 images = 1,728 evaluations, 1m 42s):**
+  - **Best Config:** `clip_limit = 8.0, grid_size = 4`
+  - **Validation Metrics:** $\text{SSIM} = 0.5103 \pm 0.1109$, $\text{PSNR} = 12.65\text{ dB}$, $\text{Time} = 1.31\text{ ms/image}$.
+- **GA Hyperparameter Sweep (12 sampled configs × 3 seeds × 72 images = 2,592 runs, 22m 09s):**
+  - **Best Config:** `pop_size = 30, generations = 50, crossover_rate = 0.9, mutation_rate = 0.05`
+  - **Validation Metrics:** $\text{SSIM} = 0.5125 \pm 0.0014$, $\text{PSNR} = 12.26\text{ dB}$, $\text{Time} = 402.83\text{ ms/image}$.
+  - Notice the low seed std ($\pm 0.0014$), demonstrating high optimization stability.
+- Output saved to `results/hyperparameter_tuning.csv` (36 total rows).
+
 ---
 
 ## Upcoming Steps
