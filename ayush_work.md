@@ -391,7 +391,7 @@ Ran complete hyperparameter tuning sweep on 72 validation images:
 
 ## Step 5 — Method Comparison & Visualization Synthesis (`evaluation/comparison.py`)
 **Date:** 2026-11-21  
-**Commit:** Pending — *"Member 3: method comparison and visualization synthesis"*
+**Commit:** `4da6cf3` — *"Member 3: method comparison and visualization synthesis"*
 
 ### What was done
 Implemented `evaluation/comparison.py` to synthesize results across all experiments, produce formatted Markdown reports, and generate publication-quality visualization figures.
