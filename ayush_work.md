@@ -408,15 +408,48 @@ Implemented `evaluation/comparison.py` to synthesize results across all experime
 
 ---
 
-## Upcoming Steps
+## Step 6 — Streamlit Interactive Application (`app.py`)
+**Date:** 2026-11-21  
+**Commit:** Pending — *"Member 3: interactive streamlit demo app"*
+
+### What was done
+Fully developed `app.py` as an interactive, multi-tab Streamlit dashboard for real-time demonstration, evaluation, and analysis of low-light image contrast enhancement.
+
+### Key Features
+1. **Interactive Enhancement & Live Comparison (Tab 1):**
+   - **Input Choices:** Select directly from LOL paired test samples (`dataset/eval15/low/` with automatic paired ground truth detection) or upload custom user images.
+   - **Multi-Method Pipeline:** Simultaneously processes and visually compares:
+     1. Low-light Input
+     2. Histogram Equalization
+     3. Default CLAHE (`clip=2.0, grid=8`)
+     4. GA-Optimized CLAHE (Proposed Stage 1)
+     5. Full Hybrid Pipeline (Proposed Stage 1 + 2)
+     6. Normal-light Ground Truth (when available)
+   - **Live Metric Dashboard:** Computes PSNR, SSIM, Shannon Entropy, Contrast Improvement Index (CII), Edge Preservation Index (EPI), and execution latency in ms.
+   - **GA Convergence Plot:** Live visual tracking of Best Fitness vs Mean Population Fitness per generation.
+   - **RGB Histograms:** Dynamic channel distribution comparison.
+2. **Benchmark & Evaluation Viewer (Tab 2):**
+   - Interactive data tables for `comparison_table.csv`, `ablation.csv`, and `hyperparameter_tuning.csv`.
+   - Embeds generated publication figures:
+     - `comparison_metrics_barchart.png`
+     - `runtime_tradeoff.png`
+     - `ablation_boxplots.png`
+     - `clahe_tuning_heatmap.png`
+3. **Project Architecture & Defense Guide (Tab 3):**
+   - Detailed visual breakdown of the two-stage hybrid pipeline.
+   - Explains chromosome representation, multi-objective fitness formula (EPI + Entropy + Brightness - Immerkaer Noise Penalty), BLX-α crossover, and elitism for college viva/defense.
+
+---
+
+## Final Project Status
 
 | Step | Topic | Status |
 |------|-------|--------|
-| Step 1 | Setup + compat layer | ✅ Done |
-| Step 2 | GA core (`genetic_algorithm.py`) | ✅ Done |
-| Step 3 | Hybrid pipeline (`hybrid.py`) | ✅ Done |
-| Step 4A | Experiments runner (`experiments.py` 1-3) | ✅ Done |
-| Step 4B | Experiments runner (`experiments.py` 4-6) | ✅ Done |
-| Step 5 | Experiments completion & comparison (`comparison.py`) | ✅ Done |
-| Step 6 | Streamlit interactive app (`app.py`) | ⏳ Pending |
+| Step 1 | Setup + compat layer (`optimization/compat.py`) | ✅ Complete |
+| Step 2 | GA core (`optimization/genetic_algorithm.py`) | ✅ Complete |
+| Step 3 | Hybrid pipeline (`optimization/hybrid.py`) | ✅ Complete |
+| Step 4A | Experiments runner 1–3 (`evaluation/experiments.py`) | ✅ Complete |
+| Step 4B | Experiments runner 4–6 (`evaluation/experiments.py`) | ✅ Complete |
+| Step 5 | Method comparison & synthesis (`evaluation/comparison.py`) | ✅ Complete |
+| Step 6 | Interactive Streamlit App (`app.py`) | ✅ Complete |
 
