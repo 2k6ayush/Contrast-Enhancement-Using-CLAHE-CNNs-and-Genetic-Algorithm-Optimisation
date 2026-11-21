@@ -389,6 +389,25 @@ Ran complete hyperparameter tuning sweep on 72 validation images:
 
 ---
 
+## Step 5 — Method Comparison & Visualization Synthesis (`evaluation/comparison.py`)
+**Date:** 2026-11-21  
+**Commit:** Pending — *"Member 3: method comparison and visualization synthesis"*
+
+### What was done
+Implemented `evaluation/comparison.py` to synthesize results across all experiments, produce formatted Markdown reports, and generate publication-quality visualization figures.
+
+### Key Capabilities
+1. **Report Generation:**
+   - `generate_comparison_markdown()`: Generates comparative performance tables across Traditional (HE, CLAHE) and Proposed (GA-CLAHE + CNN) paradigms.
+   - `generate_ablation_markdown()`: Tabulates metric changes across Ablation Configs A, C, and D.
+2. **Visualizations Generated (`results/figures/`):**
+   - `comparison_metrics_barchart.png`: Grouped bar charts with standard deviation error bars comparing PSNR, SSIM, and Shannon Entropy.
+   - `ablation_boxplots.png`: Box plots showing statistical distribution of SSIM and PSNR across all test images per ablation configuration.
+   - `clahe_tuning_heatmap.png`: 2D validation SSIM landscape heatmap mapping Clip Limits (1.0 to 8.0) vs Tile Grid Sizes (4 to 16).
+   - `runtime_tradeoff.png`: Quality (SSIM) vs Latency (time in ms on log scale) Pareto trade-off scatter plot.
+
+---
+
 ## Upcoming Steps
 
 | Step | Topic | Status |
@@ -398,6 +417,6 @@ Ran complete hyperparameter tuning sweep on 72 validation images:
 | Step 3 | Hybrid pipeline (`hybrid.py`) | ✅ Done |
 | Step 4A | Experiments runner (`experiments.py` 1-3) | ✅ Done |
 | Step 4B | Experiments runner (`experiments.py` 4-6) | ✅ Done |
-| Step 4C | Streamlit app (`app.py`) | ⏳ Pending |
-| Step 5 | Experiments completion & comparison (`comparison.py`) | ⏳ Pending |
+| Step 5 | Experiments completion & comparison (`comparison.py`) | ✅ Done |
+| Step 6 | Streamlit interactive app (`app.py`) | ⏳ Pending |
 
