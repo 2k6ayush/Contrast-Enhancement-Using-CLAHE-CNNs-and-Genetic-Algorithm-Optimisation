@@ -410,7 +410,7 @@ Implemented `evaluation/comparison.py` to synthesize results across all experime
 
 ## Step 6 — Streamlit Interactive Application (`app.py`)
 **Date:** 2026-11-21  
-**Commit:** Pending — *"Member 3: interactive streamlit demo app"*
+**Commit:** `8ae8aa9` — *"Member 3: interactive streamlit demo app"*
 
 ### What was done
 Fully developed `app.py` as an interactive, multi-tab Streamlit dashboard for real-time demonstration, evaluation, and analysis of low-light image contrast enhancement.
