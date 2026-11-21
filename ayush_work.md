@@ -332,7 +332,7 @@ Output:
 
 ## Step 4B — Experiments 4, 5, 6 (Hyperparameter Tuning, Ablation, Performance Comparison)
 **Date:** 2026-11-21  
-**Commit:** Pending — *"Member 3: experiments 4-6"*
+**Commit:** `6c99cf9` — *"Member 3: experiments 4-6"*
 
 ### What was done
 Extended `evaluation/experiments.py` with Experiments 4, 5, and 6, and added custom CSV persistence.
