@@ -330,6 +330,39 @@ Output:
 
 ---
 
+## Step 4B — Experiments 4, 5, 6 (Hyperparameter Tuning, Ablation, Performance Comparison)
+**Date:** 2026-11-21  
+**Commit:** Pending — *"Member 3: experiments 4-6"*
+
+### What was done
+Extended `evaluation/experiments.py` with Experiments 4, 5, and 6, and added custom CSV persistence.
+
+### Experiments Implemented
+1. **Experiment 4: Hyperparameter Tuning (`run_experiment_4`):**
+   - **Validation Split Only:** Carves 15% of `our485` (72 images) using fixed seed (`seed=42`). `eval15` (test split) is strictly never used for tuning.
+   - **4a: Fixed-parameter CLAHE sweep:** 24 combinations of clip limit $\in \{1, 2, 3, 4, 6, 8\} \times$ tile grid size $\in \{4, 8, 12, 16\}$.
+   - **4b: GA parameter sweep:** Pop size $\{20, 30, 50\} \times$ generations $\{20, 50\} \times$ crossover rate $\{0.7, 0.8, 0.9\} \times$ mutation rate $\{0.01, 0.05, 0.1\}$ (54 possible combinations). Samples random subset of `n_configs` (default 12) via `--n-configs`, runs 3 random seeds per config (`seed`, `seed+1`, `seed+2`), and computes mean and std of PSNR, SSIM, and time.
+   - **Member 2 CNN LR Placeholder:** Includes `cnn_learning_rate` in the CSV schema (`results/hyperparameter_tuning.csv`).
+2. **Experiment 5: Ablation Study (`run_experiment_5`):**
+   - Evaluated on test split (`eval15`).
+   - Configs:
+     - **A:** Default CLAHE only (clip=2.0, grid=8)
+     - **B:** CNN only (gracefully skipped if stub/no weights)
+     - **C:** GA + CLAHE (no CNN)
+     - **D:** Full Hybrid (GA-CLAHE $\to$ CNN)
+   - Results saved to `results/ablation.csv`.
+3. **Experiment 6: Performance Comparison Table (`run_experiment_6`):**
+   - Compares: **Traditional** (Histogram Equalization, Default CLAHE), **ML/DL** (CNN), and **Proposed** (GA-CLAHE + CNN Hybrid).
+   - Aggregates per-approach mean $\pm$ std for all metrics: PSNR, SSIM, Entropy, NIQE, CII, EPI, Time (ms/img), and model size (MB).
+   - Results saved to `results/comparison_table.csv` and pretty-printed to console.
+
+### Benchmark & Timing Probe
+- Tested on 3 validation images with 2 GA configurations (`--exp 4 --max-images 3 --n-configs 2`):
+  - Fixed CLAHE sweep (24 configs × 3 images): ~8 seconds total.
+  - GA sweep (2 configs × 3 seeds × 3 images = 18 GA runs): ~9.8 seconds total (~0.54s per GA run).
+
+---
+
 ## Upcoming Steps
 
 | Step | Topic | Status |
@@ -337,7 +370,8 @@ Output:
 | Step 1 | Setup + compat layer | ✅ Done |
 | Step 2 | GA core (`genetic_algorithm.py`) | ✅ Done |
 | Step 3 | Hybrid pipeline (`hybrid.py`) | ✅ Done |
-| Step 4A | Experiments runner (`experiments.py`) | ✅ Done |
-| Step 4B | Streamlit app (`app.py`) | ⏳ Pending |
+| Step 4A | Experiments runner (`experiments.py` 1-3) | ✅ Done |
+| Step 4B | Experiments runner (`experiments.py` 4-6) | ✅ Done |
+| Step 4C | Streamlit app (`app.py`) | ⏳ Pending |
 | Step 5 | Experiments completion & comparison (`comparison.py`) | ⏳ Pending |
 

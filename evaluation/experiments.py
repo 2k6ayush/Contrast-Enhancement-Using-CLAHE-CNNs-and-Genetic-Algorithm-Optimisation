@@ -5,8 +5,8 @@ Member 3 owns this file.
 
 OVERVIEW
 --------
-Runs all three experiments comparing image enhancement methods on the LOL
-dataset (low-light pairs). Results are written to results/metrics.csv.
+Runs six experiments comparing image enhancement methods on the LOL
+dataset (low-light pairs). Results are written to several CSV files in results/.
 
 EXPERIMENTS
 -----------
@@ -16,6 +16,11 @@ EXPERIMENTS
   Exp 3 — Hybrid GA:  enhance_hybrid(), run in two modes:
             (a) hybrid_ref   — reference-based GA fitness (uses ground truth)
             (b) hybrid_noref — no-reference GA fitness (no ground truth given)
+  Exp 4 — Hyperparameter tuning (validation split ONLY):
+            (a) Fixed-param CLAHE sweep (clip × grid combinations)
+            (b) GA parameter sweep (pop_size × gens × crossover × mutation)
+  Exp 5 — Ablation study (test split): A=CLAHE, B=CNN, C=GA-CLAHE, D=hybrid
+  Exp 6 — Performance comparison: aggregate table (Traditional, CNN, Hybrid)
 
 DATASET
 -------
@@ -23,7 +28,7 @@ DATASET
   dataset/eval15/low  + dataset/eval15/high  → test set (never used for tuning)
 
   Validation split (15% of our485, fixed seed) is carved here but NOT used
-  for tuning — it is available via --split val for future ablation runs.
+  for GA tuning — it is available via --split val for hyperparameter selection.
 
 USAGE
 -----
@@ -31,12 +36,15 @@ USAGE
   python evaluation/experiments.py --exp all --split test
   python evaluation/experiments.py --exp 2 --model-path models/cnn_weights.pth
   python evaluation/experiments.py --exp 3 --max-images 10 --split val
+  python evaluation/experiments.py --exp 4 --max-images 3 --n-configs 2
+  python evaluation/experiments.py --exp 5
+  python evaluation/experiments.py --exp 6
 
 SAFE RE-RUN
 -----------
-  Results are written to results/metrics.csv.  On re-run, any existing rows
-  for the same (experiment, method) pair are replaced, so you can re-run a
-  single experiment without duplicating results.
+  Results are written to results/metrics.csv (Exp 1-3), results/hyperparameter_tuning.csv
+  (Exp 4), results/ablation.csv (Exp 5), results/comparison_table.csv (Exp 6).
+  On re-run, existing rows for the same key are replaced.
 
 METRICS (per image)
 -------------------
@@ -90,7 +98,8 @@ from optimization.compat import (
     enhance_with_cnn,
     using_stubs,
 )
-from optimization.hybrid import enhance_hybrid
+from optimization.hybrid import enhance_hybrid, enhance_ga_clahe
+from optimization.genetic_algorithm import optimize_clahe
 
 
 # ===========================================================================
@@ -100,8 +109,11 @@ from optimization.hybrid import enhance_hybrid
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 RESULTS_DIR      = PROJECT_ROOT / "results"
 METRICS_CSV      = RESULTS_DIR / "metrics.csv"
+HPARAM_CSV       = RESULTS_DIR / "hyperparameter_tuning.csv"
+ABLATION_CSV     = RESULTS_DIR / "ablation.csv"
+COMPARISON_CSV   = RESULTS_DIR / "comparison_table.csv"
 
-# Column order for the CSV
+# Column order for the per-image metrics CSV (Exp 1–3)
 CSV_COLUMNS = [
     "experiment",
     "method",
@@ -113,6 +125,68 @@ CSV_COLUMNS = [
     "contrast_improvement_index",
     "edge_preservation",
     "time_ms",
+]
+
+# Column order for hyperparameter tuning CSV (Exp 4)
+HPARAM_COLUMNS = [
+    "experiment",
+    "method",
+    "config_id",
+    # CLAHE fixed-sweep params
+    "clip_limit",
+    "grid_size",
+    # GA sweep params
+    "pop_size",
+    "generations",
+    "crossover_rate",
+    "mutation_rate",
+    # CNN learning-rate placeholder (Member 2 fills this in)
+    "cnn_learning_rate",
+    "seed",
+    # Aggregated metrics (mean over images)
+    "psnr_mean",
+    "psnr_std",
+    "ssim_mean",
+    "ssim_std",
+    "time_ms_mean",
+    "time_ms_std",
+    "n_images",
+]
+
+# Column order for ablation CSV (Exp 5)
+ABLATION_COLUMNS = [
+    "config",
+    "config_label",
+    "image",
+    "psnr",
+    "ssim",
+    "entropy",
+    "niqe",
+    "contrast_improvement_index",
+    "edge_preservation",
+    "time_ms",
+]
+
+# Column order for comparison table CSV (Exp 6)
+COMPARISON_COLUMNS = [
+    "approach",
+    "method",
+    "psnr_mean",
+    "psnr_std",
+    "ssim_mean",
+    "ssim_std",
+    "entropy_mean",
+    "entropy_std",
+    "niqe_mean",
+    "niqe_std",
+    "cii_mean",
+    "cii_std",
+    "epi_mean",
+    "epi_std",
+    "time_ms_mean",
+    "time_ms_std",
+    "model_size_mb",
+    "n_images",
 ]
 
 
@@ -378,6 +452,26 @@ def _save_csv(path: Path, rows: list[dict]) -> None:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _save_csv_generic(
+    path: Path,
+    rows: list[dict],
+    columns: list[str],
+) -> None:
+    """
+    Write rows to a CSV with custom columns, creating parent dirs as needed.
+
+    Used for hyperparameter_tuning.csv, ablation.csv, comparison_table.csv.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        for row in rows:
+            # Ensure all columns present (fill missing with "")
+            safe = {col: row.get(col, "") for col in columns}
+            writer.writerow(safe)
 
 
 def upsert_results(
@@ -718,6 +812,595 @@ def _evaluate_paired(
 
 
 # ===========================================================================
+# EXPERIMENT 4 — Hyperparameter Tuning (VALIDATION SPLIT ONLY)
+# ===========================================================================
+
+# ── 4a: Fixed-param CLAHE sweep grid ────────────────────────────────────────
+CLAHE_CLIP_VALUES = [1.0, 2.0, 3.0, 4.0, 6.0, 8.0]
+CLAHE_GRID_VALUES = [4, 8, 12, 16]
+
+# ── 4b: GA parameter sweep grid ────────────────────────────────────────────
+GA_POP_SIZES       = [20, 30, 50]
+GA_GENERATIONS     = [20, 50]
+GA_CROSSOVER_RATES = [0.7, 0.8, 0.9]
+GA_MUTATION_RATES  = [0.01, 0.05, 0.1]
+
+
+def _evaluate_clahe_config(
+    clip_limit: float,
+    grid_size: int,
+    low_paths: list[Path],
+    gt_paths:  list[Path],
+) -> dict:
+    """
+    Evaluate one CLAHE configuration on a set of images.
+
+    Returns a dict with aggregated metrics (mean/std of PSNR, SSIM, time).
+    """
+    psnrs, ssims, times = [], [], []
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for low_p, gt_p in zip(low_paths, gt_paths):
+            low_img = load_image(low_p)
+            gt_img  = load_image(gt_p)
+
+            t0  = time.perf_counter()
+            out = apply_clahe(low_img, clip_limit=clip_limit, grid_size=grid_size)
+            t1  = time.perf_counter()
+
+            psnrs.append(calculate_psnr(out, gt_img))
+            ssims.append(calculate_ssim(out, gt_img))
+            times.append((t1 - t0) * 1000.0)
+
+    return {
+        "psnr_mean":    round(float(np.mean(psnrs)), 4),
+        "psnr_std":     round(float(np.std(psnrs)), 4),
+        "ssim_mean":    round(float(np.mean(ssims)), 4),
+        "ssim_std":     round(float(np.std(ssims)), 4),
+        "time_ms_mean": round(float(np.mean(times)), 2),
+        "time_ms_std":  round(float(np.std(times)), 2),
+        "n_images":     len(psnrs),
+    }
+
+
+def _evaluate_ga_config(
+    pop_size: int,
+    generations: int,
+    crossover_rate: float,
+    mutation_rate: float,
+    seed: int,
+    low_paths: list[Path],
+    gt_paths:  list[Path],
+) -> dict:
+    """
+    Evaluate one GA configuration (using no-reference fitness) on a set of images.
+
+    Returns a dict with aggregated metrics (mean/std of PSNR, SSIM, time).
+    """
+    psnrs, ssims, times = [], [], []
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for low_p, gt_p in zip(low_paths, gt_paths):
+            low_img = load_image(low_p)
+            gt_img  = load_image(gt_p)
+
+            t0 = time.perf_counter()
+            ga_result = optimize_clahe(
+                low_img,
+                ground_truth=None,  # no-reference — we evaluate against GT afterwards
+                pop_size=pop_size,
+                generations=generations,
+                crossover_rate=crossover_rate,
+                mutation_rate=mutation_rate,
+                seed=seed,
+            )
+            t1 = time.perf_counter()
+
+            out = ga_result["enhanced"]
+            psnrs.append(calculate_psnr(out, gt_img))
+            ssims.append(calculate_ssim(out, gt_img))
+            times.append((t1 - t0) * 1000.0)
+
+    return {
+        "psnr_mean":    round(float(np.mean(psnrs)), 4),
+        "psnr_std":     round(float(np.std(psnrs)), 4),
+        "ssim_mean":    round(float(np.mean(ssims)), 4),
+        "ssim_std":     round(float(np.std(ssims)), 4),
+        "time_ms_mean": round(float(np.mean(times)), 2),
+        "time_ms_std":  round(float(np.std(times)), 2),
+        "n_images":     len(psnrs),
+    }
+
+
+def run_experiment_4(
+    data_root:  Path,
+    max_images: Optional[int] = None,
+    n_configs:  int = 12,
+    seed:       int = 42,
+) -> None:
+    """
+    Experiment 4: Hyperparameter tuning — VALIDATION split ONLY.
+
+    4a — Fixed-param CLAHE sweep:
+         clip_limit ∈ {1,2,3,4,6,8} × grid_size ∈ {4,8,12,16} = 24 configs.
+    4b — GA parameter sweep:
+         Randomly sample `n_configs` combinations from the full grid of
+         pop_size × generations × crossover_rate × mutation_rate.
+         Each config is run with 3 seeds (seed, seed+1, seed+2) and results
+         are averaged to report mean and std.
+
+    Results are saved to results/hyperparameter_tuning.csv.
+
+    NOTE: CNN learning rate is Member 2's responsibility. A placeholder column
+    'cnn_learning_rate' is included in the CSV schema so Member 2 can fill it in.
+
+    Parameters
+    ----------
+    data_root  : Path         — dataset root directory
+    max_images : int | None   — limit val images (for quick testing)
+    n_configs  : int          — number of random GA configs to sample (default 12)
+    seed       : int          — base seed for reproducibility
+    """
+    print("\n" + "=" * 60)
+    print("  EXPERIMENT 4 — Hyperparameter Tuning  [val split only]")
+    print("=" * 60)
+
+    # ── Load validation split from our485 ────────────────────────────────────
+    all_low, all_gt = load_paired_split(data_root, "our485")
+    _, (val_low, val_gt) = make_val_split(all_low, all_gt, seed=seed)
+
+    if max_images:
+        val_low = val_low[:max_images]
+        val_gt  = val_gt[:max_images]
+
+    print(f"  Validation images: {len(val_low)}")
+
+    all_rows: list[dict] = []
+
+    # ── 4a: Fixed-param CLAHE sweep ──────────────────────────────────────────
+    print(f"\n[4a] CLAHE sweep: {len(CLAHE_CLIP_VALUES)} clips × "
+          f"{len(CLAHE_GRID_VALUES)} grids = "
+          f"{len(CLAHE_CLIP_VALUES) * len(CLAHE_GRID_VALUES)} configs")
+
+    config_id = 0
+    clahe_configs = [
+        (clip, grid)
+        for clip in CLAHE_CLIP_VALUES
+        for grid in CLAHE_GRID_VALUES
+    ]
+
+    for clip, grid in tqdm(clahe_configs, desc="CLAHE sweep"):
+        config_id += 1
+        metrics = _evaluate_clahe_config(clip, grid, val_low, val_gt)
+
+        row = {
+            "experiment":       "exp4_clahe_sweep",
+            "method":           "clahe_fixed",
+            "config_id":        config_id,
+            "clip_limit":       clip,
+            "grid_size":        grid,
+            "pop_size":         "",
+            "generations":      "",
+            "crossover_rate":   "",
+            "mutation_rate":    "",
+            "cnn_learning_rate": "",   # placeholder for Member 2
+            "seed":             "",
+        }
+        row.update(metrics)
+        all_rows.append(row)
+
+    # Find best CLAHE config
+    best_clahe = max(all_rows, key=lambda r: float(r.get("ssim_mean", 0)))
+    print(f"\n  Best CLAHE config: clip={best_clahe['clip_limit']}, "
+          f"grid={best_clahe['grid_size']}  →  "
+          f"SSIM={best_clahe['ssim_mean']}, PSNR={best_clahe['psnr_mean']} dB")
+
+    # ── 4b: GA parameter sweep ───────────────────────────────────────────────
+    # Build full grid, then sample n_configs randomly
+    full_ga_grid = [
+        (pop, gen, cx, mut)
+        for pop in GA_POP_SIZES
+        for gen in GA_GENERATIONS
+        for cx  in GA_CROSSOVER_RATES
+        for mut in GA_MUTATION_RATES
+    ]
+    total_combos = len(full_ga_grid)
+
+    rng = np.random.default_rng(seed=seed)
+    n_to_sample = min(n_configs, total_combos)
+    chosen_indices = rng.choice(total_combos, size=n_to_sample, replace=False)
+    chosen_configs = [full_ga_grid[i] for i in sorted(chosen_indices)]
+
+    ga_seeds = [seed, seed + 1, seed + 2]  # 3 seeds per config
+
+    print(f"\n[4b] GA sweep: {total_combos} possible combos → sampling {n_to_sample} configs")
+    print(f"     Each config runs with {len(ga_seeds)} seeds, avg over {len(val_low)} images")
+
+    ga_rows: list[dict] = []
+    for pop, gen, cx, mut in tqdm(chosen_configs, desc="GA sweep"):
+        config_id += 1
+        # Run each config with multiple seeds, collect per-seed metrics
+        seed_psnrs, seed_ssims, seed_times = [], [], []
+
+        for s in ga_seeds:
+            m = _evaluate_ga_config(pop, gen, cx, mut, s, val_low, val_gt)
+            seed_psnrs.append(float(m["psnr_mean"]))
+            seed_ssims.append(float(m["ssim_mean"]))
+            seed_times.append(float(m["time_ms_mean"]))
+
+        row = {
+            "experiment":       "exp4_ga_sweep",
+            "method":           "ga_clahe",
+            "config_id":        config_id,
+            "clip_limit":       "",
+            "grid_size":        "",
+            "pop_size":         pop,
+            "generations":      gen,
+            "crossover_rate":   cx,
+            "mutation_rate":    mut,
+            "cnn_learning_rate": "",   # placeholder for Member 2
+            "seed":             f"{ga_seeds}",
+            "psnr_mean":        round(float(np.mean(seed_psnrs)), 4),
+            "psnr_std":         round(float(np.std(seed_psnrs)), 4),
+            "ssim_mean":        round(float(np.mean(seed_ssims)), 4),
+            "ssim_std":         round(float(np.std(seed_ssims)), 4),
+            "time_ms_mean":     round(float(np.mean(seed_times)), 2),
+            "time_ms_std":      round(float(np.std(seed_times)), 2),
+            "n_images":         len(val_low),
+        }
+        ga_rows.append(row)
+
+    all_rows.extend(ga_rows)
+
+    # Find best GA config
+    if ga_rows:
+        best_ga = max(ga_rows, key=lambda r: float(r.get("ssim_mean", 0)))
+        print(f"\n  Best GA config: pop={best_ga['pop_size']}, gen={best_ga['generations']}, "
+              f"cx={best_ga['crossover_rate']}, mut={best_ga['mutation_rate']}  →  "
+              f"SSIM={best_ga['ssim_mean']}, PSNR={best_ga['psnr_mean']} dB, "
+              f"time={best_ga['time_ms_mean']} ms")
+
+    # ── Save to CSV ──────────────────────────────────────────────────────────
+    _save_csv_generic(HPARAM_CSV, all_rows, HPARAM_COLUMNS)
+    print(f"\n  → Saved {len(all_rows)} rows to {HPARAM_CSV}")
+
+    print("\n  NOTE FOR MEMBER 2: The 'cnn_learning_rate' column is a placeholder.")
+    print("  Please ask Member 2 to record their CNN training learning rate and")
+    print("  append it to this CSV, or provide a separate CSV with columns:")
+    print("    cnn_learning_rate, psnr_mean, ssim_mean, time_ms_mean")
+
+
+# ===========================================================================
+# EXPERIMENT 5 — Ablation Study (TEST split)
+# ===========================================================================
+
+def run_experiment_5(
+    low_paths:  list[Path],
+    gt_paths:   list[Path],
+    model_path: Optional[Path] = None,
+    ga_seed:    int = 42,
+) -> None:
+    """
+    Experiment 5: Ablation study on the test split.
+
+    Configurations:
+        A — Default CLAHE only (clip=2.0, grid=8)
+        B — CNN only (skipped if stub/no weights)
+        C — GA-CLAHE only (no CNN refinement)
+        D — Full hybrid (GA-CLAHE → CNN)
+
+    All use the test split (eval15) and are saved to results/ablation.csv.
+    This experiment isolates the contribution of each component.
+
+    Parameters
+    ----------
+    low_paths  : list[Path]        — test-split low-light image paths
+    gt_paths   : list[Path]        — test-split ground-truth image paths
+    model_path : Path | None       — CNN weights for configs B and D
+    ga_seed    : int               — random seed for the GA
+    """
+    print("\n" + "=" * 60)
+    print("  EXPERIMENT 5 — Ablation Study  [test]")
+    print("=" * 60)
+
+    all_rows: list[dict] = []
+    stubs = using_stubs()
+
+    # ── Helper to evaluate one config ────────────────────────────────────────
+    def _run_ablation_config(
+        config: str,
+        label: str,
+        method_fn_paired: Callable,
+    ) -> list[dict]:
+        """Run one ablation config and return per-image rows."""
+        rows = []
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for low_p, gt_p in tqdm(
+                zip(low_paths, gt_paths),
+                total=len(low_paths),
+                desc=f"Abl-{config}",
+            ):
+                low_img = load_image(low_p)
+                gt_img  = load_image(gt_p)
+
+                t0  = time.perf_counter()
+                out = method_fn_paired(low_img, gt_img)
+                t1  = time.perf_counter()
+
+                if out.dtype != np.uint8:
+                    out = np.clip(out, 0, 255).astype(np.uint8)
+
+                niqe_v = calculate_niqe(out)
+                rows.append({
+                    "config":       config,
+                    "config_label": label,
+                    "image":        low_p.name,
+                    "psnr":         round(float(calculate_psnr(out, gt_img)), 4),
+                    "ssim":         round(float(calculate_ssim(out, gt_img)), 4),
+                    "entropy":      round(float(calculate_entropy(out)), 4),
+                    "niqe":         round(float(niqe_v), 4)
+                                    if not np.isnan(niqe_v) else float("nan"),
+                    "contrast_improvement_index": round(
+                        float(out.std()) / (float(low_img.std()) + 1e-8), 4
+                    ),
+                    "edge_preservation": round(
+                        float(calculate_edge_preservation(out, gt_img)), 4
+                    ),
+                    "time_ms":      round((t1 - t0) * 1000.0, 2),
+                })
+        return rows
+
+    # ── Config A: Default CLAHE ──────────────────────────────────────────────
+    print("\n[A] Default CLAHE (clip=2.0, grid=8)")
+    a_rows = _run_ablation_config(
+        "A", "Default CLAHE",
+        lambda low, gt: apply_clahe(low, clip_limit=2.0, grid_size=8),
+    )
+    all_rows.extend(a_rows)
+    _print_summary("Config A — CLAHE", a_rows)
+
+    # ── Config B: CNN only ───────────────────────────────────────────────────
+    print("\n[B] CNN only")
+    model = None
+    if (
+        not stubs.get("build_model", True)
+        and not stubs.get("enhance_with_cnn", True)
+        and model_path is not None
+        and model_path.exists()
+    ):
+        try:
+            import torch  # type: ignore
+            model = build_model()
+            state = torch.load(str(model_path), map_location="cpu")
+            model.load_state_dict(state)
+            model.eval()
+        except Exception as exc:
+            print(f"  [WARN] Could not load CNN: {exc}")
+            model = None
+
+    if model is not None:
+        b_rows = _run_ablation_config(
+            "B", "CNN only",
+            lambda low, gt: enhance_with_cnn(low, model),
+        )
+        all_rows.extend(b_rows)
+        _print_summary("Config B — CNN", b_rows)
+    else:
+        print("  [SKIP] CNN not available (stub or no weights). Config B skipped.")
+
+    # ── Config C: GA-CLAHE only (no CNN) ─────────────────────────────────────
+    print("\n[C] GA-CLAHE only (no CNN)")
+    c_rows = _run_ablation_config(
+        "C", "GA-CLAHE (no CNN)",
+        lambda low, gt: enhance_ga_clahe(low, ground_truth=None, seed=ga_seed),
+    )
+    all_rows.extend(c_rows)
+    _print_summary("Config C — GA-CLAHE", c_rows)
+
+    # ── Config D: Full hybrid (GA-CLAHE → CNN) ──────────────────────────────
+    print("\n[D] Full hybrid (GA-CLAHE → CNN)")
+    d_rows = _run_ablation_config(
+        "D", "Full hybrid",
+        lambda low, gt: enhance_hybrid(
+            low, model, ground_truth=None, seed=ga_seed
+        )["output"],
+    )
+    all_rows.extend(d_rows)
+    _print_summary("Config D — Hybrid", d_rows)
+
+    # ── Save ─────────────────────────────────────────────────────────────────
+    _save_csv_generic(ABLATION_CSV, all_rows, ABLATION_COLUMNS)
+    print(f"\n  → Saved {len(all_rows)} rows to {ABLATION_CSV}")
+
+
+# ===========================================================================
+# EXPERIMENT 6 — Performance Comparison Table
+# ===========================================================================
+
+def run_experiment_6(
+    low_paths:   list[Path],
+    gt_paths:    list[Path],
+    model_path:  Optional[Path] = None,
+    ga_seed:     int = 42,
+) -> None:
+    """
+    Experiment 6: Aggregate performance comparison table.
+
+    Approaches:
+        Traditional — best of HE and default CLAHE (runs both, picks higher SSIM)
+        ML/DL      — CNN only (skipped if stub)
+        Proposed   — Full hybrid (GA-CLAHE → CNN)
+
+    For each approach, reports: mean ± std for PSNR, SSIM, Entropy, NIQE,
+    CII, EPI, time_ms, plus model size (MB) if available.
+
+    Saved to results/comparison_table.csv.
+
+    Parameters
+    ----------
+    low_paths   : list[Path]     — test-split low-light image paths
+    gt_paths    : list[Path]     — test-split ground-truth image paths
+    model_path  : Path | None    — CNN weights
+    ga_seed     : int            — random seed
+    """
+    print("\n" + "=" * 60)
+    print("  EXPERIMENT 6 — Performance Comparison Table  [test]")
+    print("=" * 60)
+
+    stubs = using_stubs()
+    table_rows: list[dict] = []
+
+    def _aggregate(label: str, approach: str, rows: list[dict],
+                   model_size_mb: str = "") -> dict:
+        """Aggregate per-image rows into a summary row."""
+        def _m(key):
+            vals = [float(r[key]) for r in rows
+                    if isinstance(r.get(key), (int, float))
+                    and not np.isnan(float(r.get(key, "nan")))]
+            return (round(float(np.mean(vals)), 4) if vals else float("nan"),
+                    round(float(np.std(vals)), 4)  if vals else float("nan"))
+
+        pm, ps = _m("psnr")
+        sm, ss = _m("ssim")
+        em, es = _m("entropy")
+        nm, ns = _m("niqe")
+        cm, cs = _m("contrast_improvement_index")
+        ep_m, ep_s = _m("edge_preservation")
+        tm, ts = _m("time_ms")
+
+        return {
+            "approach":      approach,
+            "method":        label,
+            "psnr_mean":     pm, "psnr_std":     ps,
+            "ssim_mean":     sm, "ssim_std":     ss,
+            "entropy_mean":  em, "entropy_std":  es,
+            "niqe_mean":     nm, "niqe_std":     ns,
+            "cii_mean":      cm, "cii_std":      cs,
+            "epi_mean":      ep_m, "epi_std":    ep_s,
+            "time_ms_mean":  tm, "time_ms_std":  ts,
+            "model_size_mb": model_size_mb,
+            "n_images":      len(rows),
+        }
+
+    # ── Traditional: HE ──────────────────────────────────────────────────────
+    print("\n[6] Running Histogram Equalisation …")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        he_rows = evaluate_method(
+            method_fn=lambda img: apply_histogram_equalization(img),
+            low_paths=low_paths, gt_paths=gt_paths, desc="HE-cmp",
+        )
+    table_rows.append(_aggregate("Histogram EQ", "Traditional", he_rows))
+
+    # ── Traditional: CLAHE ────────────────────────────────────────────────────
+    print("[6] Running default CLAHE …")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        clahe_rows = evaluate_method(
+            method_fn=lambda img: apply_clahe(img, clip_limit=2.0, grid_size=8),
+            low_paths=low_paths, gt_paths=gt_paths, desc="CLAHE-cmp",
+        )
+    table_rows.append(_aggregate("Default CLAHE", "Traditional", clahe_rows))
+
+    # ── CNN only ──────────────────────────────────────────────────────────────
+    model = None
+    model_size_mb = ""
+    if (
+        not stubs.get("build_model", True)
+        and not stubs.get("enhance_with_cnn", True)
+        and model_path is not None
+        and model_path.exists()
+    ):
+        try:
+            import torch  # type: ignore
+            model = build_model()
+            state = torch.load(str(model_path), map_location="cpu")
+            model.load_state_dict(state)
+            model.eval()
+            model_size_mb = round(model_path.stat().st_size / (1024 ** 2), 2)
+        except Exception as exc:
+            print(f"  [WARN] Could not load CNN: {exc}")
+            model = None
+
+    if model is not None:
+        print("[6] Running CNN only …")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            cnn_rows = evaluate_method(
+                method_fn=lambda img: enhance_with_cnn(img, model),
+                low_paths=low_paths, gt_paths=gt_paths, desc="CNN-cmp",
+            )
+        table_rows.append(_aggregate("CNN", "ML/DL", cnn_rows, str(model_size_mb)))
+    else:
+        print("  [SKIP] CNN not available. ML/DL row will be absent.")
+
+    # ── Proposed: Hybrid ──────────────────────────────────────────────────────
+    print("[6] Running Hybrid (GA-CLAHE → CNN) …")
+    hybrid_rows = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for low_p, gt_p in tqdm(
+            zip(low_paths, gt_paths), total=len(low_paths), desc="Hybrid-cmp"
+        ):
+            low_img = load_image(low_p)
+            gt_img  = load_image(gt_p)
+
+            t0 = time.perf_counter()
+            result = enhance_hybrid(
+                low_img, model, ground_truth=None, seed=ga_seed,
+            )
+            out = result["output"]
+            t1 = time.perf_counter()
+
+            if out.dtype != np.uint8:
+                out = np.clip(out, 0, 255).astype(np.uint8)
+
+            niqe_v = calculate_niqe(out)
+            hybrid_rows.append({
+                "image": low_p.name,
+                "psnr":  round(float(calculate_psnr(out, gt_img)), 4),
+                "ssim":  round(float(calculate_ssim(out, gt_img)), 4),
+                "entropy": round(float(calculate_entropy(out)), 4),
+                "niqe":  round(float(niqe_v), 4)
+                         if not np.isnan(niqe_v) else float("nan"),
+                "contrast_improvement_index": round(
+                    float(out.std()) / (float(low_img.std()) + 1e-8), 4
+                ),
+                "edge_preservation": round(
+                    float(calculate_edge_preservation(out, gt_img)), 4
+                ),
+                "time_ms": round((t1 - t0) * 1000.0, 2),
+            })
+
+    table_rows.append(_aggregate(
+        "GA-CLAHE + CNN (Proposed)", "Proposed", hybrid_rows,
+        str(model_size_mb) if model is not None else "",
+    ))
+
+    # ── Save & print ─────────────────────────────────────────────────────────
+    _save_csv_generic(COMPARISON_CSV, table_rows, COMPARISON_COLUMNS)
+    print(f"\n  → Saved {len(table_rows)} rows to {COMPARISON_CSV}")
+
+    # Pretty-print the table
+    print("\n  ┌──────────────────────────────────────────────────────────────┐")
+    print("  │               PERFORMANCE COMPARISON TABLE                  │")
+    print("  ├──────────────────────────────────────────────────────────────┤")
+    for r in table_rows:
+        psnr_s = (f"{r['psnr_mean']:.2f}±{r['psnr_std']:.2f}"
+                  if not np.isnan(r['psnr_mean']) else "N/A")
+        ssim_s = (f"{r['ssim_mean']:.4f}±{r['ssim_std']:.4f}"
+                  if not np.isnan(r['ssim_mean']) else "N/A")
+        t_s    = (f"{r['time_ms_mean']:.1f}±{r['time_ms_std']:.1f}"
+                  if not np.isnan(r['time_ms_mean']) else "N/A")
+        print(f"  │ {r['method']:25s}  PSNR={psnr_s:14s}  "
+              f"SSIM={ssim_s:14s}  t={t_s:12s} │")
+    print("  └──────────────────────────────────────────────────────────────┘")
+
+
+# ===========================================================================
 # HELPERS
 # ===========================================================================
 
@@ -752,7 +1435,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--exp",
-        choices=["1", "2", "3", "all"],
+        choices=["1", "2", "3", "4", "5", "6", "all"],
         default="all",
         help="Which experiment(s) to run.",
     )
@@ -789,6 +1472,13 @@ def parse_args() -> argparse.Namespace:
         default=42,
         help="Random seed for the GA and validation split.",
     )
+    parser.add_argument(
+        "--n-configs",
+        type=int,
+        default=12,
+        dest="n_configs",
+        help="Number of random GA configurations to sample in Exp 4b.",
+    )
     return parser.parse_args()
 
 
@@ -805,6 +1495,8 @@ def main() -> None:
     print(f"  Data root   : {args.data_root}")
     print(f"  Model path  : {args.model_path or 'None'}")
     print(f"  Seed        : {args.seed}")
+    if args.exp in ("4", "all"):
+        print(f"  N configs   : {args.n_configs}")
 
     # ── Warn about active stubs ──────────────────────────────────────────────
     stubs = using_stubs()
@@ -817,7 +1509,9 @@ def main() -> None:
             stacklevel=1,
         )
 
-    # ── Load images for the requested split ──────────────────────────────────
+    # ── Load images for the requested split (Exp 1-3) ────────────────────────
+    # Exp 4 loads its own val split internally.
+    # Exp 5 and 6 always use the test split.
     data_root = args.data_root.resolve()
 
     if args.split == "test":
@@ -841,6 +1535,9 @@ def main() -> None:
     run_1 = args.exp in ("1", "all")
     run_2 = args.exp in ("2", "all")
     run_3 = args.exp in ("3", "all")
+    run_4 = args.exp in ("4", "all")
+    run_5 = args.exp in ("5", "all")
+    run_6 = args.exp in ("6", "all")
 
     if run_1:
         run_experiment_1(low_paths, gt_paths, split_label)
@@ -848,19 +1545,24 @@ def main() -> None:
         run_experiment_2(low_paths, gt_paths, split_label, args.model_path)
     if run_3:
         run_experiment_3(low_paths, gt_paths, split_label, args.model_path, args.seed)
+    if run_4:
+        # Exp 4 always uses VALIDATION split (never test) — loads its own data
+        run_experiment_4(data_root, args.max_images, args.n_configs, args.seed)
+    if run_5:
+        # Exp 5 always uses TEST split
+        test_low, test_gt = load_paired_split(data_root, "eval15")
+        run_experiment_5(test_low, test_gt, args.model_path, args.seed)
+    if run_6:
+        # Exp 6 always uses TEST split
+        test_low, test_gt = load_paired_split(data_root, "eval15")
+        run_experiment_6(test_low, test_gt, args.model_path, args.seed)
 
     # ── Final CSV summary ────────────────────────────────────────────────────
-    if METRICS_CSV.exists():
-        print(f"\n[DONE] Results written to {METRICS_CSV}")
-        all_rows = _load_csv(METRICS_CSV)
-        # Print unique experiment+method combos and their row counts
-        combos: dict[tuple, int] = {}
-        for r in all_rows:
-            k = (r.get("experiment", ""), r.get("method", ""))
-            combos[k] = combos.get(k, 0) + 1
-        print("\n  CSV contents:")
-        for (exp, meth), count in sorted(combos.items()):
-            print(f"    {exp:20s}  {meth:20s}  {count} rows")
+    result_csvs = [METRICS_CSV, HPARAM_CSV, ABLATION_CSV, COMPARISON_CSV]
+    for csv_file in result_csvs:
+        if csv_file.exists():
+            rows = _load_csv(csv_file)
+            print(f"\n[DONE] {csv_file.name}: {len(rows)} total rows")
 
     print("\n[ALL EXPERIMENTS COMPLETE]")
 
