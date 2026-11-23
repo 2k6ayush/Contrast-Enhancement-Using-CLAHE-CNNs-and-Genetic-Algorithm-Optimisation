@@ -1,0 +1,4 @@
+method,Time (ms),PSNR,SSIM,Entropy,NIQE,Contrast Improvement,Edge Preservation
+"CLAHE (clip=2.0, grid=8)",2.4332,9.1323,0.3565,5.5541,7.2684,1.7141,0.9529
+HE,11.3491,14.2553,0.4247,5.2885,8.495,8.1414,0.7432
+Low-light (no enhancement),0.0033,7.7733,0.1914,4.7616,6.7494,1.0,1.0

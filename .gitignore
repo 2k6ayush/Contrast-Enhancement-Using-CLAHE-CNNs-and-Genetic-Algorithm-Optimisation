@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+dataset/LOL/
+dataset/BSD500/
+results/traditional_outputs/
+*.pth
