@@ -7,6 +7,21 @@
 
 ---
 
+## Member 2 CNN quick start
+
+The integrated `cnn/` package provides a compact U-Net, paired-data validation, a shared leakage-safe split manifest, baseline and GA-CLAHE-refinement training, versioned checkpoints, evaluation, and RGB `uint8` inference. Full details are in [`cnn/README.md`](cnn/README.md).
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+streamlit run app.py
+```
+
+The application expects separate `models/baseline/best.pt` and `models/refinement/best.pt` checkpoints. Missing, mismatched, raw, or test-only weights are reported visibly and are never replaced with identity or random enhancement. GPU training is documented in `kaggle/cnn_training.ipynb`.
+
+---
+
 ## 📌 1. Project Overview
 
 Image enhancement is an important task in digital image processing. Images captured in poor lighting conditions often suffer from low contrast, poor visibility, loss of details and noise.

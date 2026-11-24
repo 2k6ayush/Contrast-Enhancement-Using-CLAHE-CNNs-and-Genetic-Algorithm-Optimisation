@@ -24,8 +24,8 @@ EXPERIMENTS
 
 DATASET
 -------
-  dataset/our485/low  + dataset/our485/high  → training + validation
-  dataset/eval15/low  + dataset/eval15/high  → test set (never used for tuning)
+  Dataset/our485/low  + Dataset/our485/high  → training + validation
+  Dataset/eval15/low  + Dataset/eval15/high  → test set (never used for tuning)
 
   Validation split (15% of our485, fixed seed) is carved here but NOT used
   for GA tuning — it is available via --split val for hyperparameter selection.
@@ -1462,7 +1462,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-root",
         type=Path,
-        default=Path("dataset"),
+        default=PROJECT_ROOT / "Dataset",
         dest="data_root",
         help="Root directory of the dataset.",
     )
