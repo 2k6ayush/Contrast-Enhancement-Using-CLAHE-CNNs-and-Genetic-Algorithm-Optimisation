@@ -162,8 +162,8 @@ Image-Enhancement-Project/
 
 | Team Member | Domain | Assigned Files | Responsibilities |
 |:---|:---|:---|:---|
-| **Member 1** | Traditional Methods & Metrics | `traditional/traditional.py`, `traditional/metrics.py`, `dataset/` | Histogram Equalization, standard CLAHE, PSNR, SSIM, Shannon Entropy, and NIQE metric routines. |
-| **Member 2** | Deep Learning CNN | `cnn/model.py`, `cnn/train.py`, `cnn/inference.py`, `cnn/losses.py`, `models/` | CNN architecture design, training loop on LOL paired images, loss functions, and weight checkpointing. |
+| **Member 1(Dhanushree)** | Traditional Methods & Metrics | `traditional/traditional.py`, `traditional/metrics.py`, `dataset/` | Histogram Equalization, standard CLAHE, PSNR, SSIM, Shannon Entropy, and NIQE metric routines. |
+| **Member 2(Danush Y Shetty)** | Deep Learning CNN | `cnn/model.py`, `cnn/train.py`, `cnn/inference.py`, `cnn/losses.py`, `models/` | CNN architecture design, training loop on LOL paired images, loss functions, and weight checkpointing. |
 | **Member 3 (Ayush)** | **Optimization, Integration & UI** | `optimization/*`, `evaluation/experiments.py`, `evaluation/comparison.py`, `app.py` | Genetic Algorithm engine, hybrid pipeline orchestrator, dynamic compatibility layer, 6 benchmark experiments, plotting synthesis, and Streamlit app. |
 
 ---
@@ -324,20 +324,3 @@ python -m streamlit run app.py
 ```
 
 ---
-
-## 🎯 10. Defense & Viva Highlights (Key Takeaways)
-
-For academic evaluation and project presentation:
-
-1. **Why is a Hybrid Pipeline better than CNN-only or CLAHE-only?**  
-   *Pure CNNs act as black boxes and require millions of parameters; pure CLAHE uses rigid default parameters that fail across different scenes. Our hybrid approach uses evolutionary optimization to extract mathematically optimal contrast and exposure in Stage 1, giving the CNN a clean, well-exposed baseline to refine in Stage 2.*
-2. **How does the Genetic Algorithm evaluate quality without ground truth?**  
-   *We developed a custom multi-objective no-reference fitness function that rewards high Shannon entropy (restored texture) and sharp Sobel edge correlation while penalizing noise amplification using Immerkaer's Laplacian kernel.*
-3. **How is the Genetic Algorithm fast enough for practical use?**  
-   *By evaluating candidate parameter pairs on a downscaled 256-pixel proxy image and applying the winning parameters once to the full-resolution image, we cut optimization latency down to $\approx 400\text{ ms}$.*
-4. **What are the concrete experimental achievements?**  
-   *On the LOL benchmark dataset, the proposed pipeline boosts structural similarity (SSIM) by **+36.4%** over standard CLAHE (0.3565 to 0.4861), increases PSNR by **+3.40 dB**, and maximizes information entropy to **6.726 bits**.*
-
----
-
-**Fundamentals of Image Processing | Final Project Evaluation 2026**
